@@ -1,0 +1,210 @@
+Brief
+What you are building:  A backend API for tracking engineering issues. Engineers report bugs, assign priorities, and track status similar to a stripped-down GitHub Issues.
+
+Context
+
+Every engineering team tracks work bugs filed, priorities set, statuses updated. DevTrack is a minimal backend for this. You will build the Django project, model the data using OOP, wire up URL routing, and expose endpoints testable in Postman.
+
+Data model
+
+Two entities. Keep it simple.
+
+Reporter
+
+A person who files issues.
+
+id - unique integer
+
+name - full name
+
+email - contact email
+
+team - e.g. backend, frontend, devops
+
+Issue
+
+A bug report or task filed by a Reporter.
+
+id - unique integer
+
+title - short summary
+
+description - full details
+
+status - one of: open, in_progress, resolved, closed
+
+priority - one of: low, medium, high, critical
+
+reporter_id - ID of the Reporter who filed this
+
+created_at - optional, use str(datetime.now())
+
+Relationship:  One Reporter can file many Issues. This is a 1:many relationship - store reporter_id inside the Issue, not the other way around.
+
+OOP design
+
+Model both entities as Python classes before writing any Django code.
+
+Part A - BaseEntity, validate(), and to_dict()
+Create an abstract base class BaseEntity. Reporter and Issue must both inherit from it.
+
+issues/models.py
+from abc import ABC, abstractmethod
+
+class BaseEntity(ABC):
+    @abstractmethod
+    def validate(self):
+        pass
+
+    def to_dict(self):
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+        }
+
+class Reporter(BaseEntity):
+    def __init__(self, id, name, email, team):
+        self.id = id
+        self.name = name
+        self.email = email
+        self.team = team
+
+    def validate(self):
+        if not self.name:
+            raise ValueError('Name cannot be empty')
+        if '@' not in self.email:
+            raise ValueError('Invalid email')
+
+# In views.py:
+# from issues.models import Reporter, Issue
+Write your own Issue class the same way. Validate that title is not empty, and that status and priority are one of the allowed values.
+
+Part B - Priority subclasses using inheritance
+Create two subclasses of Issue that override a describe() method. This is the same method overriding pattern from the add_two_numbers example in class.
+
+class Issue(BaseEntity):
+    def __init__(self, id, title, description, status, priority, reporter_id):
+        # your init here
+        pass
+    def validate(self):
+        # your validation here
+        pass
+    def describe(self):
+        return f"{self.title} [{self.priority}]"
+
+class CriticalIssue(Issue):
+    def describe(self):
+        return f"[URGENT] {self.title} — needs immediate attention"
+
+class LowPriorityIssue(Issue):
+    def describe(self):
+        return f"{self.title} — low priority, handle when free"
+In your POST /api/issues/ view, instantiate the correct subclass based on priority and include describe() in the response. For medium and high priority, use the base Issue class.
+
+if data['priority'] == 'critical':
+issue = CriticalIssue(...)
+elif data['priority'] == 'low':
+issue = LowPriorityIssue(...)
+else:
+issue = Issue(...)
+issue.validate()
+response_data = issue.to_dict()
+response_data['message'] = issue.describe()
+return JsonResponse(response_data, status=201)
+Note:  Both to_dict() from Part A and validate() from Part A are used here. Parts A and B form one connected system.
+
+Django project structure
+
+Set up your project with the following structure:
+
+devtrack/
+manage.py
+devtrack/
+settings.py
+urls.py
+issues/
+models.py      # your OOP classes go here
+views.py
+urls.py
+Create a Django project called devtrack
+
+Create an app called issues
+
+Register the app in INSTALLED_APPS
+
+Wire up issues/urls.py inside the project's main urls.py
+
+Store data in two JSON files: issues.json and reporters.json
+
+Endpoints to build
+
+Reporter endpoints
+
+POST  /api/reporters/  —  Create a new reporter
+GET  /api/reporters/  —  Get all reporters
+GET  /api/reporters/?id=1  —  Get a single reporter by ID
+Issue endpoints
+
+
+POST  /api/issues/  —  Create a new issue
+GET  /api/issues/  —  Get all issues
+GET  /api/issues/?id=1  —  Get a single issue by ID
+GET  /api/issues/?status=open  —  Get all issues filtered by status
+Reading query params:  Use request.GET.get('id') or request.GET.get('status') to read values from the URL.
+
+Sample request and expected response
+Use this as your reference for what a correct POST /api/issues/ looks like.
+Request
+
+POST /api/issues/
+
+{
+"id": 1,
+"title": "Login button not working on mobile",
+"description": "Users on iOS 17 cannot tap the login button",
+"status": "open",
+"priority": "critical",
+"reporter_id": 1
+}
+Expected response - 201 Created
+
+
+{
+"id": 1,
+"title": "Login button not working on mobile",
+"description": "Users on iOS 17 cannot tap the login button",
+"status": "open",
+"priority": "critical",
+"reporter_id": 1,
+"message": "[URGENT] Login button not working on mobile — needs immediate attention"
+}
+Expected response - 400 Bad Request (validation failure)
+
+
+{
+"error": "Title cannot be empty"
+}
+Expected response - 404 Not Found
+
+
+{
+"error": "Issue not found"
+}
+Finding a record by ID:  Read the JSON file, loop through the list, and match on record['id'] == int(request.GET.get('id')). Return 404 if nothing matches.
+
+def get_issue(request):
+issue_id = int(request.GET.get('id'))
+with open('issues.json', 'r') as f:
+issues = json.load(f)
+for issue in issues:
+if issue['id'] == issue_id:
+return JsonResponse(issue, status=200)
+return JsonResponse({'error': 'Issue not found'}, status=404)
+Submission guidelines
+Working Django project pushed to a public GitHub repository
+
+OOP classes in issues/models.py - not mixed into views.py
+
+All endpoints tested in Postman - screenshots of at least one success and one failure for any endpoint in your README
+
+README.md with: how to run the project, what each endpoint does, one design decision you made and why
